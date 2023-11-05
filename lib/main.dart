@@ -4,12 +4,10 @@ import 'dart:convert';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:slack_logger/slack_logger.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'geoloc.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
 
 Future<void> main() async {
@@ -17,10 +15,8 @@ Future<void> main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  final fcmToken = await FirebaseMessaging.instance.getToken();
 
-  SlackLogger(webhookUrl: "https://hooks.slack.com/services/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");
-
+  await FirebaseMessaging.instance.getToken();
 
   // debugPrint(fcmToken);
   runApp(
@@ -47,9 +43,6 @@ class _WebViewAppState extends State<WebViewApp> {
   late FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
   Map<String, dynamic>? notificationPayload;
-
-  // Create a CollectionReference called users that references the firestore collection
-  CollectionReference users = FirebaseFirestore.instance.collection('users');
 
   @override
   void initState() {
@@ -79,19 +72,10 @@ class _WebViewAppState extends State<WebViewApp> {
                 return NavigationDecision.prevent;
             }
 
-            if (request.url == "$platformBaseUrl/customer_login") {
+            if (request.url == "$platformBaseUrl/delivery-man") {
               // Position position = await determinePosition(context);
-              // print("**................Once Location.....................***");
-              // print("**....................................................***");
-              // print("**................Once Location.....................***");
-              // print("**....................................................***");
-              // print('long:${position.latitude.toString()}, lat:${position.longitude.toString()}');
-              // print("**................Once Location.....................***");
-              // print("**....................................................***");
-              // print("**................Once Location.....................***");
-              // print("**....................................................***");
 
-              liveLocation(context, "$platformBaseUrl/storePosition", mtoken!);
+              liveLocation(context, "$platformBaseUrl/store-position", mtoken!);
             }
 
             return NavigationDecision.navigate;
@@ -101,12 +85,17 @@ class _WebViewAppState extends State<WebViewApp> {
       ..loadRequest(Uri.parse(platformBaseUrl));
   }
 
-  Future<void> addUser(String token) {
+  Future<void> addUser(String token) async {
     // Call the user's CollectionReference to add a new user
-    return users
-        .add({'token': token})
-        .then((value) => print("User Added"))
-        .catchError((error) => print("Failed to add user: $error"));
+    http.post(
+      Uri.parse("$platformBaseUrl/check-token"),
+      headers: <String, String>{
+        'Content-Type': 'application/json; charset=UTF-8',
+      },
+      body: jsonEncode(<String, String>{
+        'token': token,
+      }),
+    );
   }
 
   void requestPushNotificationPermission() async {
@@ -122,14 +111,14 @@ class _WebViewAppState extends State<WebViewApp> {
       sound: true,
     );
 
-    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      // debugPrint('User granted permission');
-    } else if (settings.authorizationStatus ==
-        AuthorizationStatus.provisional) {
-      // debugPrint('User granted PROVISIONAL permission');
-    } else {
-      // debugPrint('User Declined or has not accepted permission');
-    }
+    // if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+    //   // debugPrint('User granted permission');
+    // } else if (settings.authorizationStatus ==
+    //     AuthorizationStatus.provisional) {
+    //   // debugPrint('User granted PROVISIONAL permission');
+    // } else {
+    //   // debugPrint('User Declined or has not accepted permission');
+    // }
   }
 
   void getToken() async {
@@ -230,7 +219,7 @@ class _WebViewAppState extends State<WebViewApp> {
 
   void saveToken(String token) async {
     // make api request to store token
-    addUser(token);
+    await addUser(token);
   }
 
   @override

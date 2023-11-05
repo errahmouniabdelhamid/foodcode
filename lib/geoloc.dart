@@ -4,43 +4,6 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:slack_logger/slack_logger.dart';
-
-final SlackLogger _slack = SlackLogger.instance;
-
-Future<void> _showMyDialog(BuildContext context) async {
-  return showDialog<void>(
-    context: context,
-    barrierDismissible: false, // user must tap button!
-    builder: (BuildContext context) {
-      return AlertDialog(
-        title: const Text('AlertDialog Title'),
-        content: const SingleChildScrollView(
-          child: ListBody(
-            children: <Widget>[
-              Text('This is a demo alert dialog.'),
-              Text('Would you like to approve of this message?'),
-            ],
-          ),
-        ),
-        actions: <Widget>[
-          TextButton(
-            child: const Text('Cancel'),
-            onPressed: () {
-              Navigator.of(context).pop();
-            },
-          ),
-          TextButton(
-            child: const Text('Enable'),
-            onPressed: () {
-              Navigator.of(context).pop();
-            },
-          ),
-        ],
-      );
-    },
-  );
-}
 
 Future<void> _showLocationServicesDisabledDialog(BuildContext context) async {
   return showDialog<void>(
@@ -112,7 +75,7 @@ void _geoLocalisationCheck(BuildContext context) async {
   }
 
   if (permission == LocationPermission.deniedForever) {
-    _showMyDialog(context);
+    _showLocationServicesDisabledDialog(context);
     // Permissions are denied forever, handle appropriately.
     return Future.error(
         'Location permissions are permanently denied, we cannot request permissions.');
@@ -156,19 +119,8 @@ void liveLocation(BuildContext context, String storeUrl, String token) {
       .listen((Position? position) {
     if(position == null){
       // print('Unknown');
-      // _slack.send("Unknown");
     }else{
       _storePosition(storeUrl, token, position.latitude.toString(), position.longitude.toString());
-      _slack.send("long:${position.latitude.toString()}, lat:${position.longitude.toString()}");
-      // print("**................Stream Location.....................***");
-      // print("**....................................................***");
-      // print("**................Stream Location.....................***");
-      // print("**....................................................***");
-      // print('long:${position.latitude.toString()}, lat:${position.longitude.toString()}');
-      // print("**................Stream Location.....................***");
-      // print("**....................................................***");
-      // print("**................Stream Location.....................***");
-      // print("**....................................................***");
     }
   });
 }

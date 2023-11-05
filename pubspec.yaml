@@ -40,10 +40,8 @@ dependencies:
   firebase_core: ^2.15.0
   flutter_local_notifications: ^15.1.0+1
   firebase_analytics: ^10.4.4
-  cloud_firestore: ^4.8.4
   http: ^1.1.0
   geolocator: ^10.0.0
-  slack_logger: ^1.0.7
 
 dev_dependencies:
   flutter_test:
