@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -10,15 +12,90 @@ import 'firebase_options.dart';
 import 'geoloc.dart';
 import 'package:http/http.dart' as http;
 
+int id = 0;
+
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+FlutterLocalNotificationsPlugin();
+
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  print("Handling a background message: ${message.messageId}");
+
+  const AndroidNotificationChannel channel = AndroidNotificationChannel(
+    'foodcode_channel',
+    'FoodCode Notifications',
+    description: 'This channel is used for important notifications.',
+    importance: Importance.high,
+    playSound: true,
+    sound: RawResourceAndroidNotificationSound('beeps_notification'),
+  );
+
+  await flutterLocalNotificationsPlugin
+      .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+      ?.createNotificationChannel(channel);
+
+  BigPictureStyleInformation bigPictureStyleInformation = await getNotificationImage(
+      URL: message.notification!.android!.imageUrl.toString()
+  );
+
+  _showOngoingNotification(bigPictureStyleInformation, message, channel);
+}
+
+Future<void> _showOngoingNotification(
+    BigPictureStyleInformation bigPictureStyleInformation,
+    RemoteMessage message,
+    AndroidNotificationChannel channel
+  ) async {
+  const int insistentFlag = 4;
+
+  AndroidNotificationDetails androidPlatformChannelSpecifics =
+  AndroidNotificationDetails(
+    channel.id,
+    channel.name,
+    channelDescription: channel.description,
+    importance: Importance.max,
+    styleInformation: bigPictureStyleInformation,
+    priority: Priority.max,
+    playSound: true,
+    sound: channel.sound,
+    enableVibration: true,
+    additionalFlags: Int32List.fromList(<int>[insistentFlag]), // keeps the notification playing for a long time.
+  );
+
+  NotificationDetails platformChannelSpecifics =
+  NotificationDetails(android: androidPlatformChannelSpecifics);
+
+  await flutterLocalNotificationsPlugin.show(
+    id++,
+    message.notification!.title,
+    message.notification!.body,
+    platformChannelSpecifics,
+    payload: message.data['link'],
+  );
+}
+
+Future<BigPictureStyleInformation> getNotificationImage(
+    {String URL = ''}) async {
+  final http.Response response = await http.get(Uri.parse(URL));
+
+  return BigPictureStyleInformation(
+    ByteArrayAndroidBitmap.fromBase64String(base64Encode(response.bodyBytes)),
+    largeIcon: ByteArrayAndroidBitmap.fromBase64String(
+        base64Encode(response.bodyBytes)),
+  );
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
   await FirebaseMessaging.instance.getToken();
 
-  // debugPrint(fcmToken);
   runApp(
     MaterialApp(
       debugShowCheckedModeBanner: false,
@@ -40,9 +117,8 @@ class _WebViewAppState extends State<WebViewApp> {
   final String platformBaseUrl = 'https://www.foodcode.ma';
   final String platformBaseRelativeUrl = 'https://foodcode.ma';
   String? mtoken = "";
-  late FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
-      FlutterLocalNotificationsPlugin();
   Map<String, dynamic>? notificationPayload;
+  late AndroidNotificationChannel channel;
 
   @override
   void initState() {
@@ -69,12 +145,10 @@ class _WebViewAppState extends State<WebViewApp> {
           onNavigationRequest: (NavigationRequest request) async {
             if (!request.url.startsWith(platformBaseUrl) &&
                 !request.url.startsWith(platformBaseRelativeUrl)) {
-                return NavigationDecision.prevent;
+              return NavigationDecision.prevent;
             }
 
             if (request.url == "$platformBaseUrl/delivery-man") {
-              // Position position = await determinePosition(context);
-
               liveLocation(context, "$platformBaseUrl/store-position", mtoken!);
             }
 
@@ -86,8 +160,7 @@ class _WebViewAppState extends State<WebViewApp> {
   }
 
   Future<void> addUser(String token) async {
-    // Call the user's CollectionReference to add a new user
-    http.post(
+    await http.post(
       Uri.parse("$platformBaseUrl/check-token"),
       headers: <String, String>{
         'Content-Type': 'application/json; charset=UTF-8',
@@ -110,15 +183,6 @@ class _WebViewAppState extends State<WebViewApp> {
       provisional: false,
       sound: true,
     );
-
-    // if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-    //   // debugPrint('User granted permission');
-    // } else if (settings.authorizationStatus ==
-    //     AuthorizationStatus.provisional) {
-    //   // debugPrint('User granted PROVISIONAL permission');
-    // } else {
-    //   // debugPrint('User Declined or has not accepted permission');
-    // }
   }
 
   void getToken() async {
@@ -154,22 +218,28 @@ class _WebViewAppState extends State<WebViewApp> {
     await controller.loadRequest(Uri.parse(payload));
   }
 
-  Future<BigPictureStyleInformation> getNotificationImage(
-      {String URL = ''}) async {
-    final http.Response response = await http.get(Uri.parse(URL));
 
-    return BigPictureStyleInformation(
-      ByteArrayAndroidBitmap.fromBase64String(base64Encode(response.bodyBytes)),
-      largeIcon: ByteArrayAndroidBitmap.fromBase64String(
-          base64Encode(response.bodyBytes)),
-    );
-  }
 
   initInfo() async {
+    channel = const AndroidNotificationChannel(
+      'foodcode_channel',
+      'FoodCode Notifications',
+      description: 'This channel is used for important notifications.',
+      importance: Importance.high,
+      playSound: true,
+      sound: RawResourceAndroidNotificationSound('beeps_notification'),
+      enableVibration: true,
+
+    );
+
+    await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(channel);
+
     var androidInitialize = const AndroidInitializationSettings('ic_launcher');
     var iOSInitialize = const DarwinInitializationSettings();
     var initializationSettings =
-        InitializationSettings(android: androidInitialize, iOS: iOSInitialize);
+    InitializationSettings(android: androidInitialize, iOS: iOSInitialize);
 
     await flutterLocalNotificationsPlugin.initialize(
       initializationSettings,
@@ -178,7 +248,7 @@ class _WebViewAppState extends State<WebViewApp> {
         onSelectNotification(notificationResponse.payload ?? '');
       },
       onDidReceiveBackgroundNotificationResponse:
-          handleBackgroundNotificationResponse,
+      handleBackgroundNotificationResponse,
     );
 
     FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
@@ -189,37 +259,17 @@ class _WebViewAppState extends State<WebViewApp> {
         htmlFormatContentTitle: true,
       );
 
-      BigPictureStyleInformation bigPictureStyleInformation =
-          await getNotificationImage(
-              URL: message.notification!.android!.imageUrl.toString());
-      final sound = 'beeps_notification.wav';
-      AndroidNotificationDetails androidPlatformChannelSpecifics =
-          AndroidNotificationDetails(
-        'foodcode',
-        'foodcode',
-        sound: RawResourceAndroidNotificationSound(sound.split('.').first),
-        importance: Importance.max,
-        styleInformation: bigPictureStyleInformation,
-        priority: Priority.max,
-        playSound: true,
-        ongoing: true,
+      BigPictureStyleInformation bigPictureStyleInformation = await getNotificationImage(
+          URL: message.notification!.android!.imageUrl.toString()
       );
 
-      NotificationDetails platformChannelSpecifics =
-          NotificationDetails(android: androidPlatformChannelSpecifics);
-
-      await flutterLocalNotificationsPlugin.show(
-        0,
-        message.notification!.title,
-        message.notification!.body,
-        platformChannelSpecifics,
-        payload: message.data['link'],
-      );
+      _showOngoingNotification(bigPictureStyleInformation, message, channel);
     });
   }
 
+
+
   void saveToken(String token) async {
-    // make api request to store token
     await addUser(token);
   }
 
@@ -245,7 +295,5 @@ class _WebViewAppState extends State<WebViewApp> {
 
 void handleBackgroundNotificationResponse(
     NotificationResponse notificationResponse) {
-  // print("**..........................NOTIFIACTION RESPONSE.......................**");
-  // print(notificationResponse);
-  // print("**..........................END NOTIFIACTION RESPONSE.......................**");
+  print("Handling background notification response: ${notificationResponse.payload}");
 }
