@@ -202,6 +202,7 @@ class _WebViewAppState extends State<WebViewApp> {
         styleInformation: bigPictureStyleInformation,
         priority: Priority.max,
         playSound: true,
+        ongoing: true,
       );
 
       NotificationDetails platformChannelSpecifics =
